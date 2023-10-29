@@ -1,0 +1,24 @@
+
+service: ${env:SERVICE} 
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+
+functions:
+  upladToS3:
+    handler: src/handler.upload
+    events:
+      - http:
+          method: get
+          path: upload
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+useDotenv: true
