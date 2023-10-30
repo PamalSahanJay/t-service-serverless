@@ -14,11 +14,19 @@ functions:
     handler: src/handler.upload
     events:
       - http:
-          method: get
+          method: post
           path: upload
+
 
 plugins:
   - serverless-offline
   - serverless-dotenv-plugin
 
 useDotenv: true
+
+resources:
+  Resources:
+    ImageBucket:
+      Type: 'AWS::S3::Bucket'
+      Properties:
+        BucketName: ${env:BUCKET_NAME}

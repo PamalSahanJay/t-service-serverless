@@ -1,14 +1,17 @@
 'use strict';
-require('dotenv').config();
+const S3 = require('./s3')
+const { statusCode } = require('./statusCode');
+
 
 module.exports.upload = async (event) => {
-  return {
-    statusCode: 200,
-    body: JSON.stringify(
-      {
-        message: 'Go Serverless v1.0! Your function executed successfully!',
-        input: event,
-      }
-    ),
-  };
+  const imageFile = Buffer.from(event.body, 'base64');
+
+  try {
+    const response = await S3.put(imageFile);
+    console.log(response)
+    return statusCode(201, response)
+  } catch (error) {
+    return statusCode(500, error.message)
+  }
+
 };
