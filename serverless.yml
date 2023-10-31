@@ -17,6 +17,15 @@ functions:
           method: post
           path: upload
 
+  trggerStepFunction:
+    handler: src/trigger.triggerStepFunc
+    role: ${env:IAM_ROLE} 
+    events:
+      - s3:
+          bucket: ${env:BUCKET_NAME}
+          event: s3:ObjectCreated:*
+          existing: true
+
 
 plugins:
   - serverless-offline

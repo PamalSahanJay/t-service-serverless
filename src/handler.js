@@ -8,7 +8,6 @@ module.exports.upload = async (event) => {
 
   try {
     const response = await S3.put(imageFile);
-    console.log(response)
     return statusCode(201, response)
   } catch (error) {
     return statusCode(500, error.message)
