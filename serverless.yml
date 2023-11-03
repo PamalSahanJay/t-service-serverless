@@ -19,17 +19,24 @@ functions:
 
   trggerStepFunction:
     handler: src/trigger.triggerStepFunc
-    role: ${env:IAM_ROLE} 
+    role: ${env:IAM_ROLE}
+    environment:
+      STATE_MACHINE_ARN: ${env:STATE_MACHINE_NAME}
     events:
       - s3:
           bucket: ${env:BUCKET_NAME}
           event: s3:ObjectCreated:*
           existing: true
 
+  stepFunc-getFileType:
+    handler: src/stepFunction.getFileType
+    role: ${env:IAM_ROLE}
+
 
 plugins:
   - serverless-offline
   - serverless-dotenv-plugin
+  - serverless-step-functions
 
 useDotenv: true
 
@@ -39,3 +46,26 @@ resources:
       Type: 'AWS::S3::Bucket'
       Properties:
         BucketName: ${env:BUCKET_NAME}
+
+stepFunctions:
+  stateMachines:
+    imageConverter:
+      name: sv-state-machine
+      definition:
+        Comment: States to Read
+        StartAt: GetFileType
+        States:
+          GetFileType:
+            Type: Task
+            Resource: !GetAtt stepFunc-getFileType.Arn
+            TimeoutSeconds: 3
+            ResultPath: "$.results.fileType"
+            End: true
+            Catch:
+              - ErrorEquals:
+                  - States.ALL
+                Next: QuitMain
+          QuitMain:
+            Type: Fail
+            Error: GenericError
+            Cause: An Error Occured While Executing The State Machine
