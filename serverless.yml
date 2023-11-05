@@ -32,6 +32,21 @@ functions:
     handler: src/stepFunction.getFileType
     role: ${env:IAM_ROLE}
 
+  stepFunc-copyToDestination:
+    handler: src/stepFunction.copyFile
+    role: ${env:IAM_ROLE}
+
+  stepFunc-resizeImage:
+    handler: src/stepFunction.resizeImage
+    role: ${env:IAM_ROLE}
+
+  stepFunc-DeleteSourceFile:
+    handler: src/stepFunction.deleteFile
+    role: ${env:IAM_ROLE}
+
+  stepFunc-WriteToDynamoDb:
+    handler: src/stepFunction.writeToDynamoDB
+    role: ${env:IAM_ROLE}
 
 plugins:
   - serverless-offline
@@ -47,10 +62,27 @@ resources:
       Properties:
         BucketName: ${env:BUCKET_NAME}
 
+    destinationBucket:
+      Type: 'AWS::S3::Bucket'
+      Properties:
+        BucketName: ${env:DESTINATION_BUCKET}
+
+    stepFnTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${env:TABLE_NAME}  
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: imageName
+            AttributeType: S
+        KeySchema:
+          - AttributeName: imageName
+            KeyType: HASH
+    
 stepFunctions:
   stateMachines:
     imageConverter:
-      name: sv-state-machine
+      name: sv-state-machine 
       definition:
         Comment: States to Read
         StartAt: GetFileType
@@ -59,13 +91,104 @@ stepFunctions:
             Type: Task
             Resource: !GetAtt stepFunc-getFileType.Arn
             TimeoutSeconds: 3
-            ResultPath: "$.results.fileType"
-            End: true
+            ResultPath: $.results.fileType
+            Next: CheckFileType
             Catch:
               - ErrorEquals:
                   - States.ALL
                 Next: QuitMain
+          CheckFileType:
+            Type: Choice
+            Choices:
+              - Variable: $.results.fileType
+                StringEquals: jpg
+                Next: ProcessFile
+            Default: DeleteSourceFile
+          ProcessFile:
+            Type: Parallel
+            ResultPath: $.results.images
+            Branches:
+              - StartAt: CopyToDestination
+                States:
+                  CopyToDestination:
+                    Type: Task
+                    Resource: !GetAtt stepFunc-copyToDestination.Arn
+                    TimeoutSeconds: 3
+                    ResultPath: $.image.original
+                    OutputPath: $.image
+                    End: true
+                    Retry:
+                      - ErrorEquals:
+                          - States.TaskFailed
+                          - States.Timeout
+                        IntervalSeconds: 5
+                        MaxAttempts: 2
+                        BackoffRate: 2
+                      - ErrorEquals:
+                          - States.ALL
+                        IntervalSeconds: 2
+                        MaxAttempts: 2
+                        BackoffRate: 2
+                    Catch:
+                      - ErrorEquals:
+                          - States.ALL
+                        Next: QuitCopy
+                  QuitCopy:
+                    Type: Fail
+                    Error: CopyError
+                    Cause: An Error Occurred While Executing The CopyToDestination Task
+              - StartAt: ResizeImage
+                States:
+                  ResizeImage:
+                    Type: Task
+                    Resource: !GetAtt stepFunc-resizeImage.Arn
+                    TimeoutSeconds: 3
+                    ResultPath: $.image.resized
+                    OutputPath: $.image
+                    End: true
+                    Retry:
+                      - ErrorEquals:
+                          - States.TaskFailed
+                          - States.Timeout
+                        IntervalSeconds: 5
+                        MaxAttempts: 2
+                        BackoffRate: 2
+                      - ErrorEquals:
+                          - States.ALL
+                        IntervalSeconds: 2
+                        MaxAttempts: 2
+                        BackoffRate: 2
+                    Catch:
+                      - ErrorEquals:
+                          - States.ALL
+                        Next: QuitResize
+                  QuitResize:
+                    Type: Fail
+                    Error: GenericError
+                    Cause: An Error Occurred While Executing The State Machine
+            Next: WriteToDynamoDb
+          DeleteSourceFile:
+            Type: Task
+            Resource: !GetAtt stepFunc-DeleteSourceFile.Arn
+            TimeoutSeconds: 3
+            ResultPath: $.results.deletionStatus
+            OutputPath: $.results
+            Catch:
+              - ErrorEquals:
+                  - States.ALL
+                Next: QuitMain
+            End: true
+          WriteToDynamoDb:
+            Type: Task
+            Resource: !GetAtt stepFunc-WriteToDynamoDb.Arn
+            TimeoutSeconds: 3
+            ResultPath: $.results.writeStatus
+            Catch:
+              - ErrorEquals:
+                  - States.ALL
+                Next: QuitMain
+            Next: DeleteSourceFile
           QuitMain:
             Type: Fail
             Error: GenericError
-            Cause: An Error Occured While Executing The State Machine
+            Cause: An Error Occurred While Executing The State Machine
