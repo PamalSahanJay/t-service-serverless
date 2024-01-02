@@ -22,7 +22,27 @@ module.exports.copyFile = async (event) => {
 };
 
 module.exports.resizeImage = async (event) => {
-  return null
+  const bucket = event.s3.bucket.name
+  const key = event.s3.object.key
+
+  const jpgBuffer = await S3.get(bucket, key)
+  const pngBuffer = await imagemagick.convert({
+    srcData: jpgBuffer,
+    format: 'png'
+  });
+
+  const pngKey = key.replace('.jpg', '.png');
+
+  const body = pngBuffer.toString('base64');
+
+  await S3.send(bucket, key, body)
+
+  return {
+    region: 'us-east-1',
+    bucket: process.env.BUCKET_NAME,
+    key: pngKey
+  }
+
 };
 
 module.exports.deleteFile = async (event) => {

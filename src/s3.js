@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { PutObjectCommand, S3Client, DeleteObjectCommand, CopyObjectCommand } = require("@aws-sdk/client-s3");
+const { PutObjectCommand, S3Client, DeleteObjectCommand, CopyObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const client = new S3Client({});
 const BUCKET = process.env.BUCKET_NAME
 
@@ -52,8 +52,35 @@ const copy = async (bucket, key) => {
     }
 }
 
+const get = async (bucket, key) => {
+    let params = {
+        Bucket: bucket,
+        Key: key,
+    }
+
+    const command = new GetObjectCommand(params);
+    try {
+        const response = await client.send(command);
+        return await response.Body.transformToString();
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+const send = async (bucket, key, body) => {
+    let params = {
+        Bucket: bucket,
+        Key: key,
+        Body: body
+    }
+    const command = new PutObjectCommand(params)
+    return await client.send(command)
+}
+
 module.exports = {
     put,
     del,
-    copy
+    copy,
+    get,
+    send
 }
